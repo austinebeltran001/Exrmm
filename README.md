@@ -5,6 +5,9 @@ multi-tenant web console that provisions MeshCentral device groups per client,
 builds branded silent agents and MSI installers, and manages devices, alerts,
 accounts, trials and Telegram notifications.
 
+Copyright (C) 2026 EX 313 LTD. Licensed under the **GNU Affero General Public
+License v3.0** (`AGPL-3.0-only`) — see [LICENSE](LICENSE).
+
 Everything runs on a single server:
 
 | Component          | Where                                     |
@@ -72,3 +75,24 @@ A number of internal security modules (and their API routes, UI assets and
 agent payloads) are intentionally excluded from this public copy. The
 `backend/src/server.js` in this repository is the sanitized version with those
 routes removed; everything else is complete.
+
+## Licence
+
+Copyright (C) 2026 EX 313 LTD — <https://exrmm.com>
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+The complete licence text is in [LICENSE](LICENSE).
+
+EXagent and the EXagent logo are trademarks of EX 313 LTD.
+

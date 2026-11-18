@@ -1,7 +1,8 @@
 {
-  "name": "exsoftwares-portal-backend",
+  "name": "exagent-portal-backend",
   "version": "1.0.0",
-  "description": "Ex Softwares RMM portal backend: MeshCentral client, installer pipeline, API server",
+  "description": "EXagent RMM portal backend (EX 313 LTD): MeshCentral client, installer pipeline, API server",
+  "license": "AGPL-3.0-only",
   "main": "src/server.js",
   "type": "commonjs",
   "scripts": {
