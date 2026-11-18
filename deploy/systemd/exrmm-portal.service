@@ -1,0 +1,33 @@
+[Unit]
+Description=EX SOFTWARE LLC EXagent portal (mysystemservices.exrmm.com)
+Documentation=https://mysystemservices.exrmm.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/exrmm/portal/backend
+Environment=NODE_ENV=production
+Environment=HOME=/root
+# .env is loaded by the application itself (dotenv, /opt/exrmm/portal/.env).
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=20
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=exrmm-portal
+
+# Hardening: the service only needs the portal tree and outbound network.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/exrmm/portal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# runtime data and secrets
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backend/data/
+backend/logs/
+backend/agents/
+
+# build outputs and downloaded agent binaries
+installers/
+
+# local tooling scratch
+*.log
+*.out

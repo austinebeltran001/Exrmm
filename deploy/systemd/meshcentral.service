@@ -1,0 +1,16 @@
+[Unit]
+Description=MeshCentral server (EXagent)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/meshcentral
+ExecStart=/usr/bin/node node_modules/meshcentral
+Restart=always
+RestartSec=5
+LimitNOFILE=1000000
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

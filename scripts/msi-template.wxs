@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EXagent - Windows agent MSI (WiX source, built with wixl/msitools)
+
+  Naming: the installed application is named after the MeshCentral device group
+  it was downloaded for, and nothing else. The download file name is irrelevant:
+  the portal always serves exagent-setup.msi, while ProductName, the install
+  folder, the service display name and the service name all come from the
+  device group name passed to build_msi.py.
+
+  Placeholders (rendered by build_msi.py):
+    {{PRODUCT_NAME}}           - device group name = Add/Remove Programs name
+    {{CLIENT_NAME}}            - device group name as stored in the registry
+    {{MESH_ID}}                - MeshCentral device group id
+    {{SERVER_URL}}             - public MeshCentral URL
+    {{PRODUCT_VERSION}}        - MSI product version (X.Y.Z)
+    {{UPGRADE_CODE}}           - uuid5(mesh id): one product per device group
+    {{INSTALL_DIR}}            - install folder name (group-derived, sanitised)
+    {{SERVICE_NAME}}           - SCM service name for this group
+    {{SERVICE_DISPLAY_NAME}}   - service display name (= group name)
+    {{REG_KEY}}                - per-group metadata key under HKLM
+    {{AGENT_FILENAME}}         - installed agent file name
+    {{SVC_FILENAME}}           - installed runner file name
+    {{COMPONENT_GUID_BINARY}}  - uuid5(mesh id) component keys
+    {{COMPONENT_GUID_RUNNER}}
+    {{COMPONENT_GUID_METADATA}}
+    {{AGENT_EXE}}              - path to the Windows agent binary to embed
+    {{RUNNER_EXE}}             - path to the console-less service runner to embed
+    {{OUTFILE}}                - path of the .msi to produce
+    {{ICON_BLOCK}}             - optional brand icon block for Add/Remove Programs
+
+  wixl (msitools) build notes - these are NOT optional, wixl silently drops
+  elements it does not understand:
+  * Must be built with `wixl -a x64`. Without it the summary template is
+    "Intel;1033" (32-bit package) which is invalid for the 64-bit
+    ProgramFiles64Folder / Win64 components used here.
+  * <Package Platform="x64"> is not supported by wixl (arch comes from -a).
+  * <CustomAction> supports only Id, FileKey, BinaryKey, ExeCommand, Execute,
+    Impersonate, Return. The WiX-standard Directory=/Source= form is rejected
+    ("no property named 'Directory'") and the action is dropped. FileKey= +
+    ExeCommand= produces a valid Type-18 (deferred EXE) custom action.
+  * <Component> must be nested in a Directory/DirectoryRef; a Component-level
+    Directory= attribute is NOT supported and drops the component.
+
+  Install behaviour - no authored UI, but Windows Installer shows its own
+  progress window:
+  * No Dialog/Control/UIRef tables and no dialog actions are authored, so
+    there is no wizard, no licence page and no Next/Finish clicks. A plain
+    double-click therefore installs in one step.
+  * It is NOT window-less, however. When a package is opened by double-click
+    (or `msiexec /i package.msi` with no switches) Windows Installer runs at
+    its default UI level - full UI - and, having no authored UI to show,
+    displays the built-in progress dialog ("Gathering required information...",
+    then "Please wait while Windows configures ..."). That dialog belongs to
+    msiexec, not to this package, and cannot be removed by authoring: there is
+    no MSI property that lowers the default UI level. Only the UI *level* on
+    the command line controls it, so a truly invisible run requires
+    `msiexec /i exagent-setup.msi /qn` (or an EXE bootstrapper that calls it).
+    Do NOT add a <UIRef> or the WiX UI extension here: that would reintroduce a
+    real wizard on top of the progress window.
+  * The one interactive prompt that remains, with or without /qn, is the
+    Windows UAC elevation consent, because a per-machine service install needs
+    administrator rights.
+  * Per-machine install (Program Files), so it can be pushed by Group Policy,
+    Intune or SCCM with `msiexec /i exagent-setup.msi /qn`.
+  * The agent binary downloaded from MeshCentral already has the .msh
+    (server URL, device-group id, server certificate hash) embedded, so the
+    MSI only has to place two files and register the Windows service.
+  * The service is registered by the installed runner ({{SVC_FILENAME}}), via a
+    deferred custom action that runs it with `-fullinstall`. The runner extracts
+    scripts/agent-service-install.ps1, which registers a service named
+    {{SERVICE_NAME}} against *this group's* copy of the agent. It deliberately
+    does not rely on the agent's own -fullinstall to do it: that path always
+    copies to the shared "%ProgramFiles%\Mesh Agent" folder and registers one
+    shared service name, so a second device group would overwrite the first
+    one's payload and hijack its service.
+  * The agent is a CONSOLE-subsystem executable, so it cannot be the target of
+    the custom action directly: Windows Installer would create it as a child
+    of msiexec and Windows would allocate a visible black console window
+    ("Checking for previous installation... / Installing service... / Writing
+    firewall rules... / Starting service...") even in an otherwise silent run.
+    The custom actions therefore execute {{SVC_FILENAME}} (scripts/msi-runner.nsi):
+    a GUI-subsystem NSIS launcher, installed next to the agent, which runs the
+    agent through nsExec with redirected stdio so no console window is ever
+    created. The runner's AGENT_FILENAME and this package's AgentExe Name= are
+    rendered from one constant in build_msi.py and checked at build time.
+  * Return="ignore" matches the behaviour of the shipped NSIS installer
+    (ExecWait without an exit-code check): a service-registration hiccup must
+    not roll back or retry the whole MSI roll-out on hundreds of machines.
+    Details are still visible in the msiexec verbose log and in
+    %ProgramData%\EXagent\<group>\agent-install.log.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <!-- Id="*" makes Windows Installer generate a fresh ProductCode per package.
+       That is required for major upgrades; the UpgradeCode - derived from the
+       mesh id - is what stays stable per device group. -->
+  <Product Id="*"
+           Name="{{PRODUCT_NAME}}"
+           Language="1033"
+           Version="{{PRODUCT_VERSION}}"
+           Manufacturer="EX SOFTWARE LLC"
+           UpgradeCode="{{UPGRADE_CODE}}">
+
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="{{PRODUCT_NAME}} - EX SOFTWARE LLC remote monitoring agent" />
+
+    <!-- One UpgradeCode per device group, so a major upgrade only ever
+         replaces the same group's install: installing the MSI of group B must
+         not uninstall group A. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer build of {{PRODUCT_NAME}} is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <Property Id="ARPCOMMENTS" Value="MeshId={{MESH_ID}} Server={{SERVER_URL}} Service={{SERVICE_NAME}}" />
+
+    <!-- Silent-install defaults: with no authoured UI, these remove the last
+         prompts an unattended run could still raise.
+         REBOOT=ReallySuppress      - never ask for / trigger a restart, the
+                                      agent needs none to start its service
+         MSIRESTARTMANAGERCONTROL   - do not let Restart Manager try to close
+                                      running applications (nothing is held)
+         MSIFASTINSTALL=2           - skip file costing; a large unattended
+                                      roll-out no longer walks every file -->
+    <Property Id="REBOOT" Value="ReallySuppress" />
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+    <Property Id="MSIFASTINSTALL" Value="2" />
+{{ICON_BLOCK}}
+    <!-- 64-bit payload only: refuse to install on 32-bit Windows -->
+    <Condition Message="The EXagent requires 64-bit Windows.">VersionNT64</Condition>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <!-- One folder per device group: "%ProgramFiles%\<group>". Two groups
+             installed on the same machine never share a binary. -->
+        <Directory Id="INSTALLFOLDER" Name="{{INSTALL_DIR}}">
+          <Directory Id="AGENTFOLDER" Name="Agent" />
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <!-- The per-group folder itself: created at install time and removed again
+         on uninstall, so %ProgramFiles% is left exactly as it was found. Its
+         key path is the directory (CreateFolder), so it holds no file. -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="InstallFolder" Guid="{{COMPONENT_GUID_FOLDER}}" Win64="yes">
+        <CreateFolder />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="AGENTFOLDER">
+      <Component Id="AgentBinary" Guid="{{COMPONENT_GUID_BINARY}}" Win64="yes">
+        <File Id="AgentExe"
+              Name="{{AGENT_FILENAME}}"
+              Source="{{AGENT_EXE}}"
+              KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Console-less service runner. Executed by the deferred custom actions
+         below instead of the agent, so no console window is created.
+         scripts/msi-runner.nsi expects the agent next to itself ($EXEDIR) and
+         the action on its command line. -->
+    <DirectoryRef Id="AGENTFOLDER">
+      <Component Id="AgentRunner" Guid="{{COMPONENT_GUID_RUNNER}}" Win64="yes">
+        <File Id="AgentRunnerExe"
+              Name="{{SVC_FILENAME}}"
+              Source="{{RUNNER_EXE}}"
+              KeyPath="yes" />
+        <!-- Take the now-empty "\Agent" folder away on uninstall. -->
+        <RemoveFolder Id="RemoveAgentFolder" On="uninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="AGENTFOLDER">
+      <Component Id="AgentMetadata" Guid="{{COMPONENT_GUID_METADATA}}" Win64="yes">
+        <!-- Per-group key: the old shared Software\EXagent\Agent key meant the
+             second group's install overwrote the first group's metadata. -->
+        <RegistryKey Root="HKLM" Key="{{REG_KEY}}">
+          <RegistryValue Type="string" Name="ProductName" Value="{{PRODUCT_NAME}}" KeyPath="yes" />
+          <RegistryValue Type="string" Name="ClientName" Value="{{CLIENT_NAME}}" />
+          <RegistryValue Type="string" Name="MeshId" Value="{{MESH_ID}}" />
+          <RegistryValue Type="string" Name="ServerUrl" Value="{{SERVER_URL}}" />
+          <RegistryValue Type="string" Name="ServiceName" Value="{{SERVICE_NAME}}" />
+          <RegistryValue Type="string" Name="InstallDir" Value="[INSTALLFOLDER]" />
+          <RegistryValue Type="string" Name="InstalledBy" Value="exagent-setup.msi" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="AgentFeature" Title="{{PRODUCT_NAME}}" Level="1">
+      <ComponentRef Id="InstallFolder" />
+      <ComponentRef Id="AgentBinary" />
+      <ComponentRef Id="AgentRunner" />
+      <ComponentRef Id="AgentMetadata" />
+    </Feature>
+
+    <!-- Register / start the agent service (deferred: runs elevated, headless).
+         Type 18 => the installed runner is executed with `-fullinstall`; the
+         runner passes -ServiceName / -DisplayName / -InstallDir to
+         scripts/agent-service-install.ps1 and writes a per-group log, without
+         ever creating a console window. -->
+    <CustomAction Id="InstallAgentService"
+                  FileKey="AgentRunnerExe"
+                  ExeCommand="-fullinstall"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <!-- Remove the service before its files disappear. MUST stay between
+         InstallInitialize and InstallFinalize: this is a deferred (in-script)
+         action, and Windows Installer aborts the transaction with fatal error
+         2762 ("Cannot update the script. Script engine not initialized") when
+         an in-script action is sequenced outside that bracket. wixl places
+         Before="RemoveFiles" actions right after RemoveExistingProducts
+         (sequence 1402), which sits BEFORE InstallInitialize (1500) - that
+         broken ordering made every uninstall and every major-upgrade
+         remove-older-versions pass fail with 2762 (a clean install never
+         triggered it because the condition is false while REMOVE is empty).
+         After="InstallInitialize" lands at 1501, well before RemoveFiles
+         (3500), so the runner executable still exists when it runs. -->
+    <CustomAction Id="RemoveAgentService"
+                  FileKey="AgentRunnerExe"
+                  ExeCommand="-fulluninstall"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="InstallAgentService" After="InstallFiles">NOT REMOVE</Custom>
+      <Custom Action="RemoveAgentService" After="InstallInitialize">REMOVE ~= "ALL"</Custom>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>

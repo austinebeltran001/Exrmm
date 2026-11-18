@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Ylianst/MeshCentral/master/meshcentral-config-schema.json",
+  "settings": {
+    "plugins": {
+      "enabled": false
+    },
+    "cert": "mysystemservices.exrmm.com",
+    "port": 8446,
+    "aliasport": 8443,
+    "agentaliasdns": "mysystemservices.exrmm.com",
+    "redirPort": 0,
+    "AgentPong": 300,
+    "tlsOffload": false,
+    "SelfUpdate": false,
+    "AllowFraming": false,
+    "WebRTC": false,
+    "manageAllDeviceGroups": [
+      "user//admin@exrmm.com"
+    ],
+    "maxinvalidlogin": {
+      "time": 10,
+      "count": 10,
+      "coolofftime": 2,
+      "blocking": "username"
+    },
+    "datapath": "/opt/meshcentral/meshcentral-data",
+    "filespath": "/opt/meshcentral/meshcentral-files",
+    "portbind": "127.0.0.1"
+  },
+  "domains": {
+    "": {
+      "_title": "EX SOFTWARE LLC",
+      "_title2": "EXagent",
+      "minify": false,
+      "localSessionRecording": true,
+      "_userNameIsEmail": true,
+      "allowedOrigin": false,
+      "title": "EX SOFTWARE LLC",
+      "title2": "EXagent",
+      "newAccounts": false,
+      "agentnoproxy": true,
+      "agentCustomization": {
+        "displayName": "EXagent",
+        "description": "EX SOFTWARE LLC remote monitoring and management agent",
+        "companyName": "EX SOFTWARE LLC",
+        "serviceName": "EXagent",
+        "fileName": "EXagent",
+        "foregroundColor": "#FFFFFF",
+        "backgroundColor": "#0B1B2B"
+      },
+      "sitestyle": 3,
+      "footer": "&copy; EX SOFTWARE LLC &middot; Remote monitoring &amp; management",
+      "loginfooter": "&copy; EX SOFTWARE LLC &middot; All rights reserved &middot; <a href=\"mailto:support@exrmm.com\">support@exrmm.com</a>"
+    }
+  }
+}
